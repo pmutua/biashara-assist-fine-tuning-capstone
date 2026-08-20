@@ -1,0 +1,19 @@
+# Environment variables
+.env
+
+# Python
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Large model artifacts — never commit these; they're multi-GB and are
+# produced by fine_tune.py/merge_model.py on the RunPod pod, then copied
+# back only as small derived outputs (trainer_state.json, loss_curve.png).
+adapter/
+merged-model/
+
+# OS
+.DS_Store
+Thumbs.db

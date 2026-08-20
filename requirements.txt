@@ -1,0 +1,46 @@
+# BiasharaAssist capstone — dependencies.
+#
+# Two install targets, run in two different places:
+#
+#   1. LOCAL (this machine): data_prep.py, plot_loss.py, evaluate_models.py,
+#      local_inference.py (against a merged model you copy back locally).
+#      No GPU required.
+#   2. RUNPOD (the training pod): fine_tune.py, merge_model.py. Needs a CUDA
+#      GPU (24GB minimum — RTX 4090 / A5000 / A100).
+#
+# `pip install -r requirements.txt` installs everything needed for BOTH,
+# except torch itself — see the note below.
+
+# --- Do NOT add a torch pin here ---
+# RunPod's PyTorch pod templates ship a CUDA-matched torch build already
+# installed (this course's own Week 4 Tuesday run landed on PyTorch
+# 2.8.0/CUDA 12.8 via RunPod's template — see
+# ../afyaplus/notes/week4_tuesday/runpod_setup_and_run.md). Installing a
+# torch pin from PyPI here would silently replace that CUDA-matched build
+# with a CPU or mismatched-CUDA wheel and break `bitsandbytes` on the pod.
+# If you need torch locally too (e.g. to run local_inference.py against a
+# merged model on your own machine), install it separately for your
+# platform: https://pytorch.org/get-started/locally/
+
+# --- RunPod side: training and merge ---
+# These exact pins are the working combination discovered (and documented)
+# against RunPod's CUDA 12.8 template during this course's Week 4 Tuesday
+# lab — transformers 4.41.2 predates Llama 3.1's rope-scaling config format,
+# and bitsandbytes 0.43.x has no prebuilt binary for CUDA 12.8.
+transformers==4.43.3
+trl==0.8.6
+peft==0.11.1
+bitsandbytes>=0.46.1
+accelerate==0.33.0
+datasets
+huggingface_hub
+rich          # trl==0.8.6's SFTTrainer uses rich for console output internally
+hf_transfer   # RunPod presets HF_HUB_ENABLE_HF_TRANSFER=1 but doesn't preinstall this
+
+# --- Local side: data prep, evaluation, plotting ---
+rouge-score
+pandas
+matplotlib
+python-dotenv
+openai        # OpenRouter is OpenAI-API-compatible; used for the LLM judge
+tabulate      # comparison-table pretty-printing in evaluate_models.py
