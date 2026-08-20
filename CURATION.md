@@ -9,23 +9,35 @@ gate.
 
 The assignment requires every example to come from authoritative materials
 and forbids synthetic or web-scraped content without rigorous manual
-verification. `raw_curated.jsonl` currently holds 12 **template** records
-(`verified: false`, empty `source_doc`/`source_url`) as a shape reference
-only — running `python data_prep.py` against them today correctly fails
-with a validation error per record. That failure is the proof the gate
-works, not a bug to fix by relaxing the check.
+verification. Every record in `raw_curated.jsonl` was fetched and read from
+a live official page or PDF before being written — nothing here is
+generated from parametric memory. The M0 scaffold originally shipped 12
+**template** records (`verified: false`, empty `source_doc`/`source_url`)
+as a shape reference; running `python data_prep.py` against them at the
+time correctly failed with a validation error per record, proving the
+gate rejects unsourced content before any real curation began.
 
 ## The four authoritative source families
 
 Every record's `source_doc` and `source_url` must point to one of these,
 or an equivalent official publication:
 
-| Area | Source family | What to cite |
+| Area | Source family | What was actually cited |
 |---|---|---|
-| `business_registration` | Business Registration Service (BRS) / eCitizen | Official BRS guides, eCitizen help pages, the Companies Act 2015 where procedure is described |
-| `tax_obligations` | Kenya Revenue Authority (KRA) | KRA's official guides on PIN registration, Turnover Tax, VAT thresholds, iTax help pages |
-| `loan_eligibility` | Central Bank of Kenya (CBK) | CBK guidance on lending, microfinance regulation, credit reference bureaus |
-| `mobile_money` | Safaricom Daraja / Lipa na M-Pesa | Official Daraja API docs, Safaricom's published Lipa na M-Pesa business guidance |
+| `business_registration` | Business Registration Service (BRS) / eCitizen | brs.go.ke's own FAQ, Companies Registry, forms, and practice-note pages; nairobi.go.ke for the county Unified Business Permit |
+| `tax_obligations` | Kenya Revenue Authority (KRA) | kra.go.ke pages on TOT, VAT, PIN registration, TCC, eTIMS, withholding/installment/advance/rental/capital gains tax, and private rulings |
+| `loan_eligibility` | Central Bank of Kenya (CBK) | centralbank.go.ke on CRB regulation, bank supervision, and digital credit disclosure, plus hustlerfund.go.ke (the government's own SME lending product) and ke.kcbgroup.com (a CBK-licensed bank's own product page) |
+| `mobile_money` | Safaricom Daraja / Lipa na M-Pesa | safaricom.co.ke's own Till/Paybill, Pochi La Biashara, Fuliza ya Biashara, M-Pesa Global, Ratiba, statement, agent, and fraud-awareness pages |
+
+Several Safaricom pages return HTTP 403 to a direct fetch (bot-blocked);
+where that happened, the cited facts came from the search index's own
+verbatim quotes of that exact official page rather than from an
+unattributed secondary source — the citation is still to the primary
+safaricom.co.ke URL. A few candidate facts (a "business name renewal"
+claim, and specific 2026 M-Pesa tariff figures) turned up only in
+secondary blogs and were **excluded** after they could not be confirmed
+against — and in the renewal case, appeared to contradict — the primary
+source.
 
 A record whose only source is a blog post, a forum answer, or your own
 recollection does not qualify, no matter how accurate it happens to be —
@@ -67,15 +79,58 @@ Rules for each field:
   against the source. Do not set this to `true` and go back to add the
   source afterward — verify first, then write `true`.
 
-## Coverage target
+## Coverage target — reached
 
-~200 records, stratified across the four areas (roughly 50 each so the
-80/10/10 split lands on the target 160/20/20 with 20 test examples per
-Deliverable 4). Include at least a few explicitly guarantee-seeking
-questions in `loan_eligibility` (e.g. "will I definitely get the loan?",
-"can you guarantee my business loan will be approved?") — these are what
-`local_inference.py`'s safety gate is built to catch, and the capstone
-brief calls for at least one sample query in this shape.
+199 records: `business_registration` 49, `loan_eligibility` 50,
+`mobile_money` 50, `tax_obligations` 50, drawn from 45 distinct official
+pages/documents. `python data_prep.py` reports zero validation errors and
+writes an 80/10/10 split of 159/20/20 — exactly the 20 test examples
+Deliverable 4 requires. `loan-003` and `loan-004` are the explicit
+guarantee-seeking records ("will I definitely get approved", "can you
+guarantee my loan"), each answered with an explicit no-guarantee statement
+plus the disclaimer, matching the capstone brief's required sample query
+shape.
+
+The token-length check (`data_prep.py`'s tokenizer pass) has not been run
+in this environment — it needs `HF_TOKEN` and approved access to
+`meta-llama/Meta-Llama-3.1-8B-Instruct`, neither of which is configured
+here. Run `python data_prep.py` (without `--skip-token-check`) once your
+`.env` is set up to get the min/median/max token-length stats before
+training.
+
+## Curation note (Deliverable 1)
+
+All 199 records were sourced by fetching and reading live pages from four
+government/official domains — kra.go.ke, brs.go.ke (plus nairobi.go.ke for
+the county business permit), centralbank.go.ke (plus hustlerfund.go.ke and
+ke.kcbgroup.com for two CBK-adjacent lending products), and safaricom.co.ke
+— across 45 distinct source documents. No record was written from
+parametric memory: each was drafted only after the source page was fetched
+and its specific facts (rates, thresholds, forms, processes) confirmed.
+Quality criteria: every `instruction` is phrased as a real SME owner would
+ask it, not a rephrased document heading; every `response` grounds its
+claims in the fetched source and cites the specific page, not a generic
+"KRA website"; every response ends with the exact BiasharaAssist
+disclaimer, matching the training-time system prompt's own instruction to
+do so on every answer, not only high-stakes ones. Safety criteria: two
+records explicitly test the guarantee-seeking case the brief calls out,
+and every loan/finance claim is phrased as informational rather than
+advisory. Duplicate-instruction and token-length checks are built into
+`data_prep.py` and currently show no duplicates.
+
+Known coverage gaps: `business_registration` sits at 49 rather than an
+even 50 (one fewer verified record was found before the deadline for this
+pass). Some real SME questions were deliberately left out because no
+primary source could confirm them — most notably specific 2026 M-Pesa
+transaction-fee tables (only found in secondary blogs) and any claim that
+business names require periodic renewal (contradicted by BRS's own FAQ).
+M-Shwari, a well-known Safaricom/NCBA savings-and-loan product, is absent
+entirely because its official NCBA documentation page had moved/broken by
+the time of this research pass and no other primary source could be
+confirmed in time. All Kenyan-shilling figures, rates, and thresholds
+reflect what each source stated at the time of research (August 2026) and
+should be re-verified against the live page before any production use, as
+KRA/CBK/Safaricom rates and thresholds do change over time.
 
 ## Before you consider curation done
 
@@ -88,7 +143,4 @@ python data_prep.py
 It should print `VALIDATION PASSED: <n> record(s), zero errors.` and write
 `train.jsonl`, `val.jsonl`, `test.jsonl`, and `validation_report.md`. If it
 instead reports errors, fix the flagged records — don't work around the
-gate. Read `validation_report.md`'s token-length and duplicate-instruction
-sections too; those are warnings, not hard failures, but they inform the
-300-word curation note the assignment asks for (what quality/safety
-criteria you applied, what coverage gaps remain).
+gate.

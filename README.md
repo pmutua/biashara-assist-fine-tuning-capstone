@@ -21,8 +21,8 @@ next starts (see the brief this repo was built from).
 | Milestone | What it produces | Status |
 |---|---|---|
 | M0 — Scaffold | Repo layout, scripts below, 12 unverified template dataset records | Done |
-| M1 — Dataset | `train/val/test.jsonl`, `validation_report.md`, zero validation errors | Pending ~200 human-curated, sourced records — see `CURATION.md` |
-| M2 — Training | Completed training run on RunPod: `adapter/`, `trainer_state.json`, `loss_curve.png` | Pending M1 |
+| M1 — Dataset | `train/val/test.jsonl`, `validation_report.md`, zero validation errors | Done — 199 sourced records (49/50/50/50 across areas), 159/20/20 split; see `CURATION.md` |
+| M2 — Training | Completed training run on RunPod: `adapter/`, `trainer_state.json`, `loss_curve.png` | Pending — needs a RunPod GPU pod, `HF_TOKEN`, and approved Llama 3.1 access |
 | M3 — Merge & inference | `merged-model/`, 5+ verified sample responses | Pending M2 |
 | M4 — Evaluation | `comparison_results.csv`, comparison table, top/bottom-3 analysis | Pending M3 |
 | M5 — Memo | `memo.md` filled with real numbers | Pending M4 |
