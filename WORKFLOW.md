@@ -220,6 +220,29 @@ mitigation.
 fits on one page, and every claim in it can be traced back to a specific
 cell in `comparison_results.csv` or the training run.
 
+## Testing
+
+`tests/` covers the pure logic in every script — dataset validation and
+splitting (`data_prep.py`), loss-curve parsing and diagnosis
+(`plot_loss.py`), the safety/disclaimer gate (`local_inference.py`), and
+the scoring/parsing functions (`evaluate_models.py`). None of it needs a
+GPU, `HF_TOKEN`, a real merged model, or network access — the four
+scripts' heavy dependencies (`torch`, `transformers`, `rouge_score`,
+`pandas`, etc.) are lazily imported inside the specific functions that
+need them, precisely so the rest stays testable without a RunPod pod.
+
+```bash
+pip install -r requirements.txt   # includes pytest
+pytest
+```
+
+Any test needing `rouge_score` specifically (`evaluate_response()`) skips
+rather than fails if it isn't installed, since it's a "local side"
+dependency not every dev environment has yet. Run this before *and*
+after touching `data_prep.py`, `plot_loss.py`, `local_inference.py`, or
+`evaluate_models.py` — it catches a broken split or a regressed safety
+check in seconds, not after a full RunPod run.
+
 ## If you need to stop and resume mid-project
 
 Each day's "Done when" checklist is the resume point — check `README.md`'s

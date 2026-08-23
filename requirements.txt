@@ -44,3 +44,6 @@ matplotlib
 python-dotenv
 openai>=1.0   # v1 client (`from openai import OpenAI`) — OpenRouter is OpenAI-API-compatible; used for the LLM judge
 tabulate      # comparison-table pretty-printing in evaluate_models.py
+
+# --- Dev/test only: not needed on RunPod, not part of the pipeline itself ---
+pytest        # runs tests/ — see WORKFLOW.md's "Testing" section

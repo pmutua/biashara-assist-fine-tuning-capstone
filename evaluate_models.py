@@ -11,6 +11,12 @@ acts as a compliance safety gate.
 Needs the merged model directory from merge_model.py, the base LLaMA 3.1
 8B download, and a real JUDGE_API_KEY in .env.
 
+torch/transformers/huggingface_hub/openai/rouge_score/pandas/tabulate are
+all lazily imported inside the specific functions that need them, not at
+module level, so tokenize()/token_f1()/_parse_judge_response() stay
+importable and unit-testable without any of those installed — see
+tests/test_evaluate_models.py.
+
 Usage:
     python evaluate_models.py
 Writes comparison_results.csv and prints the comparison table plus the
@@ -24,17 +30,9 @@ import os
 import re
 from collections import Counter
 
-import torch
-import pandas as pd
 from dotenv import load_dotenv
-from rouge_score import rouge_scorer
-from tabulate import tabulate
-from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
-from huggingface_hub import login
-from openai import OpenAI
 
 load_dotenv()
-login(token=os.getenv("HF_TOKEN"))  # BASE_MODEL is gated; needed to download it below
 
 BASE_MODEL = os.environ.get("BASE_MODEL", "meta-llama/Meta-Llama-3.1-8B-Instruct")
 MERGED_PATH = "./merged-model"
@@ -69,10 +67,21 @@ Respond ONLY with valid JSON in this exact structure:
 
 # ------------------------- Part 1: lexical metrics -------------------------
 def tokenize(text: str) -> list[str]:
+    """Lowercase word-tokenise for lexical comparison — e.g. "Turnover
+    Tax!" -> ["turnover", "tax"]. Deliberately crude (regex, not a real
+    tokenizer): good enough for a rough overlap score, not meant to
+    match how the model itself tokenises."""
     return re.findall(r"\b\w+\b", text.lower())
 
 
 def token_f1(reference: str, hypothesis: str) -> float:
+    """How much word-level overlap the response has with the reference
+    answer, treated like an information-retrieval F1 score: precision is
+    "of the words the model said, how many were actually relevant"
+    (appeared in the reference), recall is "of the words the reference
+    needed, how many did the model include." 1.0 = same words used
+    (any order, duplicates counted correctly via Counter intersection);
+    0.0 = no words in common."""
     reference_tokens = tokenize(reference)
     hypothesis_tokens = tokenize(hypothesis)
     if not reference_tokens or not hypothesis_tokens:
@@ -86,6 +95,8 @@ def token_f1(reference: str, hypothesis: str) -> float:
 
 def evaluate_response(reference: str, hypothesis: str) -> dict[str, float]:
     """ROUGE-L and token F1 — the lexical half of the comparison table."""
+    from rouge_score import rouge_scorer  # lazy: keeps tokenize()/token_f1() usable without rouge-score installed
+
     scorer = rouge_scorer.RougeScorer(["rougeL"], use_stemmer=True)
     rouge_l = scorer.score(reference, hypothesis)["rougeL"].fmeasure
     return {
@@ -96,6 +107,11 @@ def evaluate_response(reference: str, hypothesis: str) -> dict[str, float]:
 
 # --------------------------- Part 2: the LLM judge --------------------------
 def _build_evaluation_prompt(question: str, reference: str, hypothesis: str) -> str:
+    """The user-turn content sent to the judge model alongside
+    JUDGE_SYSTEM_PROMPT's rubric: the original question, the trusted
+    reference answer to grade against, and the response actually being
+    scored (base model's or fine-tuned model's — the judge doesn't know
+    or care which)."""
     return f"""
 USER QUESTION: {question}
 REFERENCE ANSWER: {reference}
@@ -104,6 +120,11 @@ AI ASSISTANT RESPONSE: {hypothesis}
 
 
 def _parse_judge_response(raw: str) -> dict[str, object]:
+    """The judge is asked for pure JSON but LLMs sometimes wrap it in
+    prose anyway ("Sure, here's my evaluation: {...}"). Try a direct
+    parse first; if that fails, regex out the first {...} block and try
+    again; if even that fails, return a visible all-zero score rather
+    than crashing the whole evaluation run over one bad response."""
     try:
         return json.loads(raw)
     except json.JSONDecodeError:
@@ -116,18 +137,26 @@ def _parse_judge_response(raw: str) -> dict[str, object]:
         }
 
 
-def create_judge_client() -> tuple[OpenAI, str]:
+def create_judge_client():
     """Build an OpenAI-compatible client for the judge provider in .env."""
     provider = os.getenv("JUDGE_PROVIDER", "openrouter").lower()
     api_key = os.getenv("JUDGE_API_KEY")
     if not api_key or api_key in PLACEHOLDER_KEYS:
         raise RuntimeError("Configure a real JUDGE_API_KEY value in the root .env file.")
+
+    from openai import OpenAI  # lazy: only needed once we're actually building a client
+
     base_url = "https://openrouter.ai/api/v1" if provider == "openrouter" else None
     model = os.getenv("JUDGE_MODEL", "openai/gpt-4o-mini")
     return OpenAI(api_key=api_key, base_url=base_url), model
 
 
 def llm_judge(question: str, reference: str, hypothesis: str) -> dict[str, object]:
+    """Send one response to the judge model and get back its four scores.
+    Called twice per test question in run_evaluation() — once for the
+    base model's answer, once for the fine-tuned model's — so the same
+    question/reference produces two independently-judged scores to
+    compare."""
     client, model = create_judge_client()
     response = client.chat.completions.create(
         model=model,
@@ -143,6 +172,21 @@ def llm_judge(question: str, reference: str, hypothesis: str) -> dict[str, objec
 
 # ------------------------ Part 3: model loading/query -----------------------
 def build_pipe(model_path: str):
+    """Load one model (base or merged) as a HF text-generation pipeline.
+    Called twice in __main__ — once with BASE_MODEL, once with
+    MERGED_PATH — so run_evaluation() can query both under identical
+    conditions. device_map="auto" lets transformers place the model on
+    whatever GPU is available without hardcoding a device."""
+    import torch
+    from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
+
+    if model_path == BASE_MODEL:
+        # BASE_MODEL is gated; merged-model/ (produced locally by
+        # merge_model.py) is not, so only authenticate when actually
+        # downloading the gated model.
+        from huggingface_hub import login
+        login(token=os.getenv("HF_TOKEN"))
+
     tok = AutoTokenizer.from_pretrained(model_path)
     model = AutoModelForCausalLM.from_pretrained(
         model_path, torch_dtype=torch.float16, device_map="auto")
@@ -162,6 +206,15 @@ def query(pipe, tok, system_prompt: str, question: str) -> str:
 
 # ------------------------ Part 4: the evaluation loop ------------------------
 def run_evaluation(test_examples, base_pipe, base_tok, ft_pipe, ft_tok):
+    """The core loop: for each of the 20 sealed test questions, query
+    both models with identical prompting, score both responses on
+    ROUGE-L/token-F1 and the LLM judge, and record the *delta* (fine-tuned
+    minus base) for each metric — the deltas are what the memo and the
+    top-3/bottom-3 breakdown actually care about, not the raw scores.
+    Returns a pandas DataFrame (one row per question) plus a count of how
+    many fine-tuned responses fell below the groundedness floor."""
+    import pandas as pd
+
     results = []
     safety_alerts = 0
 
@@ -203,7 +256,14 @@ def run_evaluation(test_examples, base_pipe, base_tok, ft_pipe, ft_tok):
 
 
 # ----------------------- Part 5: reporting and summary ------------------------
-def print_summary(df: pd.DataFrame, safety_alerts: int):
+def print_summary(df, safety_alerts: int):
+    """Collapse the per-question DataFrame down to the 3x3 comparison
+    table Deliverable 4 requires (ROUGE-L / judge score / groundedness,
+    each averaged across all 20 questions, base vs. fine-tuned vs.
+    delta), then print the compliance verdict based on safety_alerts."""
+    import pandas as pd
+    from tabulate import tabulate
+
     summary = {
         "Metric": ["ROUGE-L (avg)", "LLM Judge /5 (avg)", "Groundedness /5 (avg)"],
         "Base LLaMA": [round(df["base_rouge_l"].mean(), 3),
@@ -226,7 +286,7 @@ def print_summary(df: pd.DataFrame, safety_alerts: int):
         print("\nCompliance check passed: no responses below the groundedness floor.")
 
 
-def print_top_bottom(df: pd.DataFrame, n: int = 3):
+def print_top_bottom(df, n: int = 3):
     """Per-question breakdown: the n biggest and n smallest improvements,
     ranked by LLM-judge delta (Deliverable 4's required analysis)."""
     ranked = df.sort_values("judge_delta", ascending=False)
@@ -245,6 +305,11 @@ def print_top_bottom(df: pd.DataFrame, n: int = 3):
 
 
 if __name__ == "__main__":
+    # The whole script in five lines: load the 20 sealed test questions,
+    # load both models, run every question through both (run_evaluation),
+    # save the raw per-question numbers to CSV, then print the two
+    # human-readable reports (print_summary's table, print_top_bottom's
+    # per-question breakdown).
     with open(TEST_FILE, encoding="utf-8") as f:
         test_examples = [json.loads(line) for line in f]
     print(f"Loaded {len(test_examples)} held-out test examples")

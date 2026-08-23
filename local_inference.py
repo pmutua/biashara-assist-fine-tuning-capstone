@@ -10,16 +10,16 @@ a keyword-based scope filter.
 
 Import-safe: other scripts (evaluate_models.py) do `from local_inference
 import ask` without triggering the demo/verification block below, which
-only runs under __main__.
+only runs under __main__. torch/transformers are lazily imported inside
+_get_pipeline() rather than at module level, so importing this file (and
+calling passes_safety_gate()) never requires a GPU, those packages, or a
+real merged-model/ directory to be present — see tests/test_local_inference.py.
 
 Usage:
     python local_inference.py
 """
 
 from __future__ import annotations
-
-import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
 
 from data_prep import SYSTEM_PROMPT, DISCLAIMER
 
@@ -45,20 +45,35 @@ PROHIBITED_PHRASES = [
     "official legal ruling",
 ]
 
-print("Loading merged BiasharaAssist model...")
-tokenizer = AutoTokenizer.from_pretrained(MERGED_PATH)
-model = AutoModelForCausalLM.from_pretrained(
-    MERGED_PATH,
-    torch_dtype=torch.float16,
-    device_map="auto",
-)
-pipe = pipeline("text-generation", model=model, tokenizer=tokenizer)
+_tokenizer = None
+_pipe = None
+
+
+def _get_pipeline():
+    """Load the merged model on first use, not at import time. Keeps this
+    module importable (and passes_safety_gate() unit-testable) without
+    torch/transformers installed or a real merged-model/ directory."""
+    global _tokenizer, _pipe
+    if _pipe is None:
+        import torch
+        from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
+
+        print("Loading merged BiasharaAssist model...")
+        _tokenizer = AutoTokenizer.from_pretrained(MERGED_PATH)
+        model = AutoModelForCausalLM.from_pretrained(
+            MERGED_PATH,
+            torch_dtype=torch.float16,
+            device_map="auto",
+        )
+        _pipe = pipeline("text-generation", model=model, tokenizer=_tokenizer)
+    return _pipe, _tokenizer
 
 
 def ask(question: str, max_new_tokens: int = 300) -> str:
     """Query the merged model with the training-time system prompt.
     do_sample=False (greedy decoding) makes output deterministic, which is
     non-negotiable for consistent operational/advisory guidance."""
+    pipe, tokenizer = _get_pipeline()
     messages = [
         {"role": "system", "content": SYSTEM_PROMPT},
         {"role": "user", "content": question},
@@ -70,11 +85,14 @@ def ask(question: str, max_new_tokens: int = 300) -> str:
     )
     output = pipe(
         prompt,
-        max_new_tokens=max_new_tokens,
-        do_sample=False,
-        repetition_penalty=1.1,
+        max_new_tokens=max_new_tokens,  # hard length cap training never had
+        do_sample=False,  # greedy decoding: always pick the top token, no randomness
+        repetition_penalty=1.1,  # mild penalty against looping ("...the the the...")
         pad_token_id=tokenizer.eos_token_id,
     )
+    # The pipeline returns the prompt PLUS the generated continuation
+    # concatenated together, so slicing off the first len(prompt)
+    # characters is what isolates just the model's new answer.
     return output[0]["generated_text"][len(prompt):].strip()
 
 
