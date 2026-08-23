@@ -257,7 +257,7 @@ def stratified_split(
         n_test = n - n_train - n_val
         train.extend(group[:n_train])
         val.extend(group[n_train : n_train + n_val])
-        test.extend(group[n_train + n_val :])
+        test.extend(group[n_train + n_val : n_train + n_val + n_test])
 
     rng.shuffle(train)
     rng.shuffle(val)

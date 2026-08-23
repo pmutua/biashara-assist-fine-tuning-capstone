@@ -13,20 +13,20 @@
 
 # --- Do NOT add a torch pin here ---
 # RunPod's PyTorch pod templates ship a CUDA-matched torch build already
-# installed (this course's own Week 4 Tuesday run landed on PyTorch
-# 2.8.0/CUDA 12.8 via RunPod's template — see
-# ../afyaplus/notes/week4_tuesday/runpod_setup_and_run.md). Installing a
-# torch pin from PyPI here would silently replace that CUDA-matched build
-# with a CPU or mismatched-CUDA wheel and break `bitsandbytes` on the pod.
-# If you need torch locally too (e.g. to run local_inference.py against a
-# merged model on your own machine), install it separately for your
+# installed (a RunPod PyTorch 2.8.0/CUDA 12.8 template is what
+# RUNPOD_GUIDE.md's Step 1 recommends). Installing a torch pin from PyPI
+# here would silently replace that CUDA-matched build with a CPU or
+# mismatched-CUDA wheel and break `bitsandbytes` on the pod. If you need
+# torch locally too (local_inference.py and evaluate_models.py both need
+# it — see the LOCAL list above), install it separately for your
 # platform: https://pytorch.org/get-started/locally/
 
 # --- RunPod side: training and merge ---
-# These exact pins are the working combination discovered (and documented)
-# against RunPod's CUDA 12.8 template during this course's Week 4 Tuesday
-# lab — transformers 4.41.2 predates Llama 3.1's rope-scaling config format,
-# and bitsandbytes 0.43.x has no prebuilt binary for CUDA 12.8.
+# These exact pins are the working combination for Llama 3.1 on a RunPod
+# CUDA 12.8 template — transformers 4.41.2 predates Llama 3.1's
+# rope-scaling config format, and bitsandbytes 0.43.x has no prebuilt
+# binary for CUDA 12.8. See RUNPOD_GUIDE.md's Troubleshooting table for
+# the exact errors each pin avoids.
 transformers==4.43.3
 trl==0.8.6
 peft==0.11.1
@@ -42,5 +42,5 @@ rouge-score
 pandas
 matplotlib
 python-dotenv
-openai        # OpenRouter is OpenAI-API-compatible; used for the LLM judge
+openai>=1.0   # v1 client (`from openai import OpenAI`) — OpenRouter is OpenAI-API-compatible; used for the LLM judge
 tabulate      # comparison-table pretty-printing in evaluate_models.py

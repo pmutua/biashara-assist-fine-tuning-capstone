@@ -30,6 +30,11 @@ general-purpose model we started from." -->
 | LLM judge score (avg / 5) | {{BASE_JUDGE}} | {{FT_JUDGE}} | {{JUDGE_PCT_IMPROVEMENT}}% |
 | Groundedness (avg / 5) | {{BASE_GROUNDED}} | {{FT_GROUNDED}} | {{GROUNDED_PCT_IMPROVEMENT}}% |
 
+*Groundedness measures how often the assistant's answer sticks to facts it
+was actually trained on, versus making something up that sounds
+plausible — the single number that matters most for a lending-adjacent
+product.*
+
 In plain language: {{PLAIN_LANGUAGE_INTERPRETATION_OF_THE_TABLE}}
 
 ## Compute cost
