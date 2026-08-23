@@ -78,6 +78,9 @@ VAL_FRACTION = 0.1
 
 
 def parse_args() -> argparse.Namespace:
+    """Command-line flags for this script — see the module docstring's
+    Usage examples. Everything has a sane default, so `python data_prep.py`
+    with no arguments is the normal way to run this."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--input", type=Path, default=DEFAULT_INPUT)
     parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT_DIR)
@@ -116,13 +119,24 @@ def load_records(path: Path) -> tuple[list[dict], list[str]]:
             except json.JSONDecodeError as exc:
                 errors.append(f"Line {line_no}: invalid JSON ({exc})")
                 continue
+            # Stash the source line number on the dict itself so later error
+            # messages can point back at exactly where a bad record lives in
+            # the file. Stripped back out before anything gets written to
+            # train/val/test.jsonl (see build_messages()) — it's bookkeeping,
+            # not part of the training data.
             record["_line_no"] = line_no
             records.append(record)
     return records, errors
 
 
 def validate_records(records: list[dict]) -> tuple[list[dict], list[str]]:
-    """Validate structure and provenance. Returns (valid_records, errors)."""
+    """The dataset gate. Checks every record has all REQUIRED_FIELDS, a
+    unique id, an allowed area, non-empty instruction/response text, a
+    filled-in source_doc/source_url, and verified is literally True — a
+    record failing any single check is dropped entirely, not partially
+    included. This is the mechanism that makes "never fabricate dataset
+    content" enforceable in code, not just a promise. Returns
+    (valid_records, errors); a record with errors is NOT in valid_records."""
     valid: list[dict] = []
     errors: list[str] = []
     seen_ids: set[str] = set()
@@ -186,6 +200,12 @@ def find_duplicate_instructions(records: list[dict]) -> list[tuple[str, list[str
 
 
 def build_messages(record: dict) -> dict:
+    """Convert one curated record (flat instruction/response fields) into
+    the LLaMA chat/messages-format dict that training and evaluation
+    actually consume: a fixed system prompt, then a user turn (the
+    question) and an assistant turn (the answer). Every training example
+    gets the identical system prompt/disclaimer — the model learns the
+    rules from repetition, not from a single mention."""
     return {
         "id": record["id"],
         "area": record["area"],
@@ -237,7 +257,18 @@ def compute_token_stats(
 def stratified_split(
     records: list[dict], seed: int, train_frac: float, val_frac: float
 ) -> tuple[list[dict], list[dict], list[dict]]:
-    """Split records 80/10/10 stratified by area, with a fixed seed."""
+    """Split records 80/10/10, stratified by area, with a fixed seed.
+
+    "Stratified" means each area (business_registration, tax_obligations,
+    loan_eligibility, mobile_money) is split 80/10/10 *on its own*, then
+    the four sub-splits are pooled — rather than splitting the whole 199
+    records as one pool. Without this, a small area like
+    business_registration (49 records) could end up nearly absent from
+    val/test just by bad luck, since a global shuffle doesn't guarantee
+    even representation per area. A fixed `seed` makes the split
+    reproducible: the same input always produces the same train/val/test
+    membership, which matters for grading and for re-running data_prep.py
+    after a dataset edit without silently reshuffling everything."""
     rng = random.Random(seed)
     by_area: dict[str, list[dict]] = defaultdict(list)
     for record in records:
@@ -250,19 +281,31 @@ def stratified_split(
         group = by_area[area][:]
         rng.shuffle(group)
         n = len(group)
+        # round() can push n_train slightly past n on a tiny group; clamp
+        # so train never claims more records than the area actually has.
         n_train = round(n * train_frac)
         n_train = min(n_train, n)
+        # Same idea for val: clamp against what's left after train, not
+        # just the raw val_frac*n, so train+val can never exceed n either.
         n_val = round(n * val_frac)
         n_val = min(n_val, n - n_train)
+        # test gets whatever remains — never computed from test_frac
+        # directly, so rounding error can't drop or duplicate a record.
         n_test = n - n_train - n_val
         train.extend(group[:n_train])
         val.extend(group[n_train : n_train + n_val])
         test.extend(group[n_train + n_val : n_train + n_val + n_test])
 
+    # Re-shuffle across areas so train.jsonl isn't sorted by area (all the
+    # business_registration examples first, then all tax_obligations, ...) —
+    # SFTTrainer sees the data in file order unless it shuffles itself.
     rng.shuffle(train)
     rng.shuffle(val)
     rng.shuffle(test)
 
+    # Sanity check the split logic itself, not just trust it: no record's
+    # id should ever appear in two splits at once (that would let the
+    # model "cheat" by memorising a question it's later tested on).
     train_ids = {r["id"] for r in train}
     val_ids = {r["id"] for r in val}
     test_ids = {r["id"] for r in test}
@@ -274,6 +317,10 @@ def stratified_split(
 
 
 def write_jsonl(path: Path, records: list[dict]) -> None:
+    """Write one chat/messages-format JSON object per line (the standard
+    JSONL layout SFTTrainer/load_dataset expects). Runs each record
+    through build_messages() first, which is also where the internal
+    `_line_no` bookkeeping field gets dropped — it never reaches the file."""
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", encoding="utf-8") as fh:
         for record in records:
@@ -292,6 +339,12 @@ def write_report(
     area_counts: Counter,
     split_sizes: dict[str, int],
 ) -> None:
+    """Render validation_report.md — Deliverable 1's required proof of a
+    zero-error validation pass. Two very different shapes depending on
+    outcome: if `errors` is non-empty, writes a short FAILED report and
+    returns early (no split-size/token-stat sections make sense for a
+    dataset that was never split); otherwise writes the full PASSED
+    report with per-area counts, split sizes, and token-length stats."""
     lines = ["# BiasharaAssist Dataset Validation Report", ""]
 
     if errors:
@@ -352,6 +405,11 @@ def write_report(
 
 
 def main() -> int:
+    """Entry point: load -> validate -> (stop here if errors) -> optional
+    token-length check -> stratified split -> write train/val/test.jsonl
+    + validation_report.md. Returns 0 on a clean pass, 1 if validation
+    found any errors (matching the shell convention: non-zero means the
+    dataset is NOT ready to train on)."""
     args = parse_args()
 
     records, parse_errors = load_records(args.input)

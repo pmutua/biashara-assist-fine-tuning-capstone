@@ -20,6 +20,9 @@ from pathlib import Path
 
 
 def parse_args() -> argparse.Namespace:
+    """Command-line flags. Defaults match fine_tune.py's OUTPUT_DIR
+    ("adapter"), so `python plot_loss.py` with no arguments just works
+    once you've copied adapter/trainer_state.json back from RunPod."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--trainer-state", type=Path, default=Path("adapter/trainer_state.json")
@@ -29,6 +32,13 @@ def parse_args() -> argparse.Namespace:
 
 
 def load_log_history(trainer_state_path: Path) -> list[dict]:
+    """Read trainer_state.json (written by HF Trainer/SFTTrainer at the
+    end of fine_tune.py) and return its log_history list — one dict per
+    logging/eval event during training, e.g. {"step": 10, "loss": 2.74}
+    or {"step": 10, "eval_loss": 1.51}. Raises loudly instead of
+    returning an empty result, since a missing or empty file almost
+    always means "you forgot to copy this back from the pod," not "there
+    is nothing to plot."""
     if not trainer_state_path.exists():
         raise FileNotFoundError(
             f"{trainer_state_path} not found. Copy it back from the RunPod "
@@ -43,6 +53,11 @@ def load_log_history(trainer_state_path: Path) -> list[dict]:
 
 
 def split_series(log_history: list[dict]) -> tuple[list[tuple[float, float]], list[tuple[float, float]]]:
+    """log_history is one flat list mixing two kinds of entries — training
+    steps (which have "loss") and evaluation steps (which have
+    "eval_loss") — logged at different cadences (logging_steps vs.
+    eval_steps in fine_tune.py's TrainingArguments). Split it into two
+    separate (step, value) point lists, one per line the plot draws."""
     train_points = [
         (entry["step"], entry["loss"])
         for entry in log_history
@@ -59,7 +74,13 @@ def split_series(log_history: list[dict]) -> tuple[list[tuple[float, float]], li
 def heuristic_diagnosis(
     train_points: list[tuple[float, float]], eval_points: list[tuple[float, float]]
 ) -> str:
-    """A rough automated read — not a substitute for the written diagnosis."""
+    """A rough automated read — not a substitute for the written diagnosis.
+    Three checks, in order: (1) if eval_loss hasn't dropped at least 2%
+    from its first to last value, the model probably hasn't learned much
+    yet (UNDERFITTING); (2) else, if the final eval_loss sits more than
+    0.5 above the final train loss, the model fits the training examples
+    much better than unseen ones (OVERFITTING); (3) otherwise, both losses
+    are falling together, which is what a healthy run looks like."""
     if not eval_points:
         return "UNKNOWN — no eval_loss entries found; validation loss was not monitored."
 
@@ -93,6 +114,13 @@ def plot(
     eval_points: list[tuple[float, float]],
     output_path: Path,
 ) -> None:
+    """Draw both loss curves on one chart and save it to output_path.
+    matplotlib is imported lazily here (not at module top) so the rest of
+    this file — load_log_history/split_series/heuristic_diagnosis, the
+    parts covered by tests/test_plot_loss.py — stays importable even
+    without matplotlib installed. matplotlib.use("Agg") selects a
+    file-output backend instead of trying to pop up a GUI window, which
+    would fail on a headless RunPod pod or CI anyway."""
     import matplotlib
 
     matplotlib.use("Agg")
@@ -116,6 +144,11 @@ def plot(
 
 
 def main() -> int:
+    """Entry point: load the trainer state -> split into train/eval point
+    series -> render loss_curve.png -> print the heuristic read. Always
+    returns 0 (nothing here is a pass/fail gate like data_prep.py's
+    validation — a "possible overfitting" read is information for you to
+    act on, not a script failure)."""
     args = parse_args()
     log_history = load_log_history(args.trainer_state)
     train_points, eval_points = split_series(log_history)

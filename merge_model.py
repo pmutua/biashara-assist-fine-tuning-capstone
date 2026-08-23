@@ -51,6 +51,12 @@ print(f"Loading LoRA adapter from {ADAPTER_PATH}...")
 model = PeftModel.from_pretrained(base_model, ADAPTER_PATH)
 
 # STEP 3: Merge and unload.
+# "Merge" applies the W + B x A x (alpha/r) formula from the module
+# docstring, layer by layer, baking the adapter's learned deltas directly
+# into the base weights. "Unload" then drops the PeftModel wrapper
+# entirely, since the adapter's math is now redundant -- what's left is
+# a plain AutoModelForCausalLM, loadable with no `peft` dependency at all
+# (which is exactly what local_inference.py and evaluate_models.py do).
 print("Merging adapter weights into base model...")
 model = model.merge_and_unload()
 

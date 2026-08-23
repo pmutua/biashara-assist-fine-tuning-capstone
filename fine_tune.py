@@ -91,6 +91,16 @@ login(token=HF_TOKEN)
 print("Configuration loaded. HF login successful.")
 
 # ------------------- 4-BIT QUANTISATION CONFIG (QLoRA) -------------------
+# This is the "Q" in QLoRA: the frozen base model's weights are stored in
+# 4 bits instead of 16/32, roughly quartering the memory an 8B model
+# needs to just sit loaded — the difference between fitting on a single
+# 24GB consumer GPU and needing a multi-GPU server. nf4 ("NormalFloat4")
+# is a quantisation format tuned for how neural-network weights are
+# actually distributed (roughly normal/bell-curve), so it loses less
+# precision than a naive 4-bit format. Double quantisation additionally
+# quantises the quantisation constants themselves, for a further small
+# memory saving. bf16 compute dtype means the actual matrix math still
+# happens at higher precision — only storage is compressed.
 bnb_config = BitsAndBytesConfig(
     load_in_4bit=True,
     bnb_4bit_quant_type="nf4",
@@ -122,6 +132,11 @@ lora_config = LoraConfig(
 )
 model = get_peft_model(model, lora_config)  # Freezes original weights
 
+# The "LoRA" in QLoRA: this is the headline number that proves the method
+# is working. Expect well under 1% of the 8B base model's parameters to
+# be trainable — everything else stays frozen, which is *why* this fits
+# on one consumer GPU and trains in ~15-30 minutes instead of the days a
+# full fine-tune of every parameter would take.
 trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)
 total = sum(p.numel() for p in model.parameters())
 print(f"Trainable parameters: {trainable:,} ({100 * trainable / total:.2f}% of {total:,})")
