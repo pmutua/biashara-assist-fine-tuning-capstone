@@ -14,6 +14,13 @@ __pycache__/
 adapter/
 merged-model/
 
+# Jupyter — autosave duplicates of whatever file was open when working
+# from a pod's Jupyter Lab terminal/notebook; never worth committing.
+.ipynb_checkpoints/
+
+# Editor
+.vscode/
+
 # OS
 .DS_Store
 Thumbs.db
