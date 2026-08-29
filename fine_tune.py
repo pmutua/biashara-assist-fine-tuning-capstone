@@ -227,6 +227,12 @@ trainer.train()
 # ----------------------------- SAVE THE ADAPTER --------------------------
 trainer.model.save_pretrained(OUTPUT_DIR)
 tokenizer.save_pretrained(OUTPUT_DIR)
+# save_pretrained() only writes model/tokenizer files. trainer_state.json
+# (the full loss/eval_loss log_history plot_loss.py needs) is written
+# automatically inside each checkpoint-N/ subfolder during training, but
+# NOT at this top level unless asked for explicitly — this call puts it
+# at the path plot_loss.py and RUNPOD_GUIDE.md both expect.
+trainer.save_state()
 print(f"\nTraining complete. Adapter saved to: {OUTPUT_DIR}")
 print(f"Copy {OUTPUT_DIR}/trainer_state.json back locally, then run "
       f"`python plot_loss.py` to generate the loss curve.")
