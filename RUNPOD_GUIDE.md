@@ -380,6 +380,7 @@ setup.
 | `Could not find the bitsandbytes CUDA binary` / `ModuleNotFoundError: No module named 'triton.ops'` | An older `bitsandbytes` has no prebuilt binary for the pod's CUDA version | `pip install "bitsandbytes>=0.46.1"` — keep `transformers` at its pin; only `bitsandbytes` needs to be newer |
 | `ValueError: .to is not supported for 4-bit or 8-bit bitsandbytes models` | An unpinned `accelerate` resolved to a version whose device-placement code conflicts with a 4-bit quantized model | `pip install "accelerate==0.33.0"` exactly, from Step 4 |
 | SSH proxy route refuses `scp` / pipes / non-interactive commands | RunPod's proxy SSH endpoint (`ssh.runpod.io`) is interactive-only by design, no file-transfer support | Use the Jupyter file browser (Step 3) or the direct-TCP SSH endpoint instead, if your pod exposes one |
+| `adapter/trainer_state.json` not found after training completes (only `adapter/checkpoint-N/trainer_state.json` exists) | Older versions of `fine_tune.py` called `trainer.model.save_pretrained(OUTPUT_DIR)` but never `trainer.save_state()` — `save_pretrained()` only writes model/tokenizer files. Checkpointing (`save_steps=10`) writes `trainer_state.json` inside each `checkpoint-N/` automatically, but not at the top level | Current `fine_tune.py` already calls `trainer.save_state()` after training, so this shouldn't recur. If you're on an older copy of the script: `cp adapter/checkpoint-<highest-N>/trainer_state.json adapter/trainer_state.json` — use the highest-numbered checkpoint, since its `log_history` contains the full run |
 
 **The general lesson if you hit something not in this table:** an
 open-ended `pip install -U <package>` has no ceiling and can silently
@@ -412,3 +413,138 @@ gaps. The real cost driver is forgetting to stop the pod — an idle
 **Running** pod bills the same per-second rate as one actively training,
 so the single most important habit here is stopping it the moment you've
 downloaded what you need.
+
+**Confirmed on the actual 2026-08-29 run**: full pipeline (deploy through
+pod termination) cost **$0.603** total, per RunPod's own exported billing
+summary — see `memo.md`'s "Compute cost" section.
+
+## Field notes — the actual 2026-08-29 run, step by step
+
+Everything above is the general guide. This section is the real walkthrough
+from the run that produced this repo's `adapter/`, `merged-model/`,
+`comparison_results.csv`, and `inference_demo_log.txt` — same steps, same
+order, with screenshots from that actual session (`screenshots/`).
+
+### Deploy and connect
+
+1. Chose the recommended cheap Ampere-class GPU — an A40 — from RunPod's
+   pod deploy screen:
+
+   ![Choose A40 GPU](screenshots/step1-choose-pod-to-deploy-use-recommended-cheap-A40-GPU.jpg)
+
+2. Selected it and clicked Deploy:
+
+   ![Select and deploy](screenshots/step2-select-A40-GPU-and-click-on-deploy.jpg)
+
+3. Pod status flipped to Running — billing starts here:
+
+   ![GPU running](screenshots/step3-GPU-now-running-screenshot-illustration.jpg)
+
+4. Opened the pod's Jupyter Notebook link from the Connect panel:
+
+   ![Jupyter ready](screenshots/step4-jupyter-notebook-ready-click-on-it-to-access-jupyter-notebook-web-interface.jpg)
+
+5. Jupyter Lab launched in the browser, then opened a **Terminal** tab
+   (not a Notebook — a notebook runs through a Python kernel, not a shell):
+
+   ![Jupyter launched, terminal](screenshots/step5-jupyternotebook-web-launched-illustration-with-click-on-terminal.jpg)
+
+### Get the repo and dependencies onto the pod
+
+6. `git clone`d this repo directly from GitHub in that terminal:
+
+   ![git clone](screenshots/step6-illustration-showing-cloning-the-project-repository-in-the-terminal.jpg)
+
+7. `cd`'d into the cloned repo:
+
+   ![cd into repo](screenshots/step7-illustration-showing-we-change-directory-to-the-cloned-repo.jpg)
+
+8. `pip install -r requirements.txt` — installed cleanly, all five
+   training-critical pins (`transformers`, `trl`, `peft`, `accelerate`,
+   `bitsandbytes`) landed at/above their pinned versions with no conflicts:
+
+   ![pip install](screenshots/step8-illustration-showing-installing-project-python-dependencies.jpg)
+
+9. Confirmed the GPU was visible before touching training — `nvidia-smi`:
+
+   ![nvidia-smi](screenshots/step9-illustration-showing-before-training-run-the-command-nvidia-smi.jpg)
+
+10. And the Python-level check — `torch.cuda.is_available()` → `True`,
+    `NVIDIA A40`:
+
+    ![torch cuda check](screenshots/step10-illustration-showing-afterrunning-commnadpython-c-import-etc-shows-returned-true-nvidia-a40.jpg)
+
+### tmux and authentication
+
+11. Checked `tmux` was available (`which tmux`):
+
+    ![which tmux](screenshots/step11-illustration-showing-running-command-which-tmux-etc.jpg)
+
+12. Started a named `tmux` session so the run would survive a dropped
+    connection:
+
+    ![tmux new -s finetune](screenshots/step12-illustration-showing-after-running-tmux-new-s-finetune.jpg)
+
+13. Set `HF_TOKEN` directly in the shell with `export`, rather than a
+    `.env` file — `fine_tune.py` reads it via `os.getenv("HF_TOKEN")`
+    with no `dotenv` loader, so `export` is what it actually needs:
+
+    ![export HF_TOKEN](screenshots/step18-illustration-showing-using-export-to-add-environment-variables.jpg)
+
+### Training
+
+14. Launched `python fine_tune.py` inside the `tmux` session:
+
+    ![training running](screenshots/step19-illustration-showing-finetuning-running-after-running-command.jpg)
+
+15. The library deprecation warnings that show up during a normal run
+    (`use_reentrant`, `torch.cpu.amp.autocast`, `past_key_values` as a
+    tuple) — all harmless, internal to PyTorch/`transformers`, confirmed
+    not to affect the actual loss values:
+
+    ![training warnings](screenshots/step20-illustration-finetunining-warnings-when-fine-tuning-is-running.jpg)
+
+16. Training completed — 3 epochs, `train_runtime` 202.24s:
+
+    ![training complete](screenshots/step21-finetunning-completed-illustration.jpg)
+
+17. `adapter/` created with the model/tokenizer files:
+
+    ![adapter folder](screenshots/step22-illustration-showing-the-adapter-folder-has-been-created-after-running-finetuning.jpg)
+
+18. Listing `adapter/` showed the model/tokenizer files and `checkpoint-N/`
+    subfolders, but **no top-level `trainer_state.json`** — the gotcha
+    documented in this guide's Troubleshooting table above. Recovered it
+    with `cp adapter/checkpoint-30/trainer_state.json adapter/trainer_state.json`
+    (`fine_tune.py` has since been fixed to call `trainer.save_state()` so
+    this manual step shouldn't be needed on future runs):
+
+    ![adapter details](screenshots/step23-illustration-showing-adapter-details.jpg)
+
+19. `python plot_loss.py --trainer-state adapter/trainer_state.json` —
+    produced `loss_curve.png`, confirming healthy convergence (see
+    `README.md`'s "Training run diagnosis" section for the full numbers):
+
+    ![loss curve generated](screenshots/step24-illustration-showing-after-running-python-plot-loss-trainer-state-adapter-trainer-json-results.jpg)
+
+### Merge, inference, evaluation — all run on the pod, not locally
+
+20. `python merge_model.py` — `merged-model/` created:
+
+    ![merge complete](screenshots/step25-illustration-showing-merge-command-run-successfully-and-the-merge-model-folder-created.jpg)
+
+21. `python local_inference.py | tee inference_demo_log.txt` — 5/5 sample
+    responses passed the disclaimer/safety gate:
+
+    ![inference demo](screenshots/step26-illustration-showing-after-run-local_inference_py_to_get_txt_log.jpg)
+
+22. `python evaluate_models.py` — all 20 test questions evaluated,
+    `comparison_results.csv` written (see `README.md`'s "Evaluation
+    results" section for the full analysis):
+
+    ![evaluation complete](screenshots/step27-illustration-showing-after-running-the-evaluation-script-and-csv-was-created.jpg)
+
+23. Downloaded `adapter/trainer_state.json`, `comparison_results.csv`,
+    and `inference_demo_log.txt` back locally, then **terminated the
+    pod** — confirmed via the RunPod console and the final billing total
+    above, not just by closing the browser tab.
