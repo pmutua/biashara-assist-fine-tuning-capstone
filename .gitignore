@@ -18,6 +18,9 @@ merged-model/
 # from a pod's Jupyter Lab terminal/notebook; never worth committing.
 .ipynb_checkpoints/
 
+# Editor
+.vscode/
+
 # OS
 .DS_Store
 Thumbs.db
