@@ -51,10 +51,10 @@ next starts (see the brief this repo was built from).
 |---|---|---|
 | M0 — Scaffold | Repo layout, scripts below, 12 unverified template dataset records | Done |
 | M1 — Dataset | `train/val/test.jsonl`, `validation_report.md`, zero validation errors | Done — 199 sourced records (49/50/50/50 across areas), 159/20/20 split; see `CURATION.md` |
-| M2 — Training | Completed training run on RunPod: `adapter/`, `trainer_state.json`, `loss_curve.png` | Script written (`fine_tune.py`), not yet run — Llama 3.1 access approved and RunPod account funded; only remaining step is pasting a real `HF_TOKEN` into `.env` and launching per `RUNPOD_GUIDE.md` |
-| M3 — Merge & inference | `merged-model/`, 5+ verified sample responses | Scripts written (`merge_model.py`, `local_inference.py`), pending M2's real `adapter/` output |
-| M4 — Evaluation | `comparison_results.csv`, comparison table, top/bottom-3 analysis | Script written (`evaluate_models.py`), pending M3's real `merged-model/` |
-| M5 — Memo | `memo.md` filled with real numbers | Pending M4 |
+| M2 — Training | Completed training run on RunPod: `adapter/`, `trainer_state.json`, `loss_curve.png` | **Done** — A40 pod, 3 epochs, 202s wall-clock; healthy convergence, no overfitting; see "Training run diagnosis" below |
+| M3 — Merge & inference | `merged-model/`, 5+ verified sample responses | **Done** — `merge_model.py` + `local_inference.py` run on the pod; **5/5 sample responses passed** the disclaimer/safety gate, including the guarantee-refusal case; see `inference_demo_log.txt` |
+| M4 — Evaluation | `comparison_results.csv`, comparison table, top/bottom-3 analysis | **Done** — all 20 test questions evaluated; see "Evaluation results" below and `comparison_results.csv` |
+| M5 — Memo | `memo.md` filled with real numbers | Pending — needs real RunPod compute cost from the billing console |
 
 ## Project structure
 
@@ -213,12 +213,76 @@ two ways:
 
 The per-question breakdown ranks all 20 questions by `judge_delta`
 (fine-tuned score minus base score) and prints the 3 biggest and 3
-smallest improvements — the pattern worth writing up in the memo is
-usually that the biggest gains land on narrow, fact-lookup questions
-(rates, deadlines, thresholds) the base model has no way to know, while
-the smallest gains land on questions the base model could already answer
-reasonably from general knowledge (e.g. generic "how do I register a
-business" phrasing).
+smallest improvements.
+
+## Training run diagnosis
+
+`fine_tune.py` ran on a RunPod A40 pod: 3 epochs over 159 training / 20
+validation examples, `train_runtime` 202.24s. `trainer_state.json`'s full
+`log_history`:
+
+| Epoch | train `loss` | `eval_loss` |
+|---|---|---|
+| 1.0 | 1.9696 | 0.9762 |
+| 2.0 | 0.6816 | 0.5721 |
+| 3.0 | 0.5603 | 0.5605 |
+
+**Verdict: healthy.** Both `loss` and `eval_loss` fall together every
+epoch — no divergence, so no overfitting signal. By epoch 3 they're
+essentially identical (0.5603 vs. 0.5605), a tight train/eval gap
+indicating the adapter learned the general pattern rather than
+memorising training examples at validation's expense. `grad_norm`
+shrinking over the run (2.15 → 0.34 → 0.30) and the cosine-scheduled
+`learning_rate` decaying to `0.0` by the final step both confirm smooth
+convergence rather than instability. See `loss_curve.png`.
+
+## Evaluation results
+
+All 20 `data/test.jsonl` questions evaluated, base LLaMA vs.
+`merged-model/`, full numbers in `comparison_results.csv`:
+
+| Metric | Base LLaMA | Fine-Tuned | Delta |
+|---|---|---|---|
+| ROUGE-L (avg) | 0.330 | 0.532 | **+0.202** (+61%) |
+| LLM Judge /5 (avg) | 4.27 | 3.70 | **−0.57** (−13%) |
+| Groundedness /5 (avg) | 3.80 | 3.10 | **−0.70** (−18%) |
+
+**8 of 20 responses (40%) fell below the `GROUNDEDNESS_FLOOR = 3.0`
+compliance gate.** This is a genuine, honestly-reported regression, not
+noise: fine-tuning made responses match the reference's *wording and
+structure* far more closely (ROUGE-L up sharply — partly because every
+training response shares the same ~50-word disclaimer, which a
+lexical-overlap metric rewards regardless of factual content), while
+making the model measurably *less* grounded on a specific subset of
+questions.
+
+The pattern is not random — it clusters by topic area:
+
+| Area | Groundedness failures |
+|---|---|
+| `tax_obligations` | 3 of 5 questions (60%) |
+| `loan_eligibility` | 3 of 5 questions (60%) |
+| `business_registration` | 1 of 4 questions (25%) |
+| `mobile_money` | 1 of 5 questions (20%) |
+
+Of the 8 failures, 7 are fine-tuning-induced regressions (the base model
+scored ≥3 on the same question; only `loan-006` was already failing
+pre-fine-tuning). The likely cause: `tax_obligations`/`loan_eligibility`
+questions lean on precise numeric facts (thresholds, repayment terms,
+fees) that, spread across many distinct sub-topics in a 159-example
+training set, often had only 1–2 supporting examples each — enough
+repetition to imprint fluent structure, not enough to reliably fix exact
+numbers. `mobile_money`/`business_registration` questions are more
+procedural (steps to follow), which generalises better from few examples.
+
+- **Biggest improvements** (`judge_delta`): `mpesa-050` (+1.2 — a nuanced
+  "does Pochi La Biashara replace a bank account" question the base model
+  answered vaguely), `loan-006` and `loan-025` (steady at 0.0 — already
+  strong in the base model, fine-tuning didn't regress them).
+- **Smallest improvements** (`judge_delta`): `tax-030` Installment Tax
+  (−2.2), `loan-035` Hustler Fund rating after a borrowing pause (−2.2),
+  `tax-001` Turnover Tax (−2.0) — all narrow numeric-fact questions in the
+  two weakest topic areas above.
 
 ## Disclaimer
 
