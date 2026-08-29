@@ -38,6 +38,11 @@ section for the full reasoning.
 [`inference_demo_log.txt`](inference_demo_log.txt) (5 sample responses,
 safety gate) · [`CURATION.md`](CURATION.md) (dataset sourcing)
 
+**[View the presentation](https://docs.google.com/presentation/d/e/2PACX-1vSoHfycKrAffrCefCNTROqqS5Sk702rxfBRAq00E3UJUcOVE9Gp2XwieQ8KFXLfiWbz1WzBd04MVmEE/pub?start=false&loop=false&delayms=3000)** —
+a 13-slide, non-technical walkthrough of the whole project (also available
+as [`BiasharaAssist_Capstone_Presentation.pptx`](BiasharaAssist_Capstone_Presentation.pptx)
+in this repo).
+
 ## Tech stack
 
 | Layer | Tool / platform | Why |
@@ -106,6 +111,9 @@ next starts (see the brief this repo was built from).
   including a real [field-notes section with screenshots](RUNPOD_GUIDE.md#field-notes--the-actual-2026-08-29-run-step-by-step) from the actual run
 - [`screenshots/`](screenshots/) — screenshots referenced by `RUNPOD_GUIDE.md`'s field notes
 - [`tests/`](tests/) — `pytest` unit tests for every script's pure logic (see `WORKFLOW.md`'s "Testing" section)
+- [`BiasharaAssist_Capstone_Presentation.pptx`](BiasharaAssist_Capstone_Presentation.pptx) — 13-slide
+  non-technical summary of the whole project; also
+  [published online](https://docs.google.com/presentation/d/e/2PACX-1vSoHfycKrAffrCefCNTROqqS5Sk702rxfBRAq00E3UJUcOVE9Gp2XwieQ8KFXLfiWbz1WzBd04MVmEE/pub?start=false&loop=false&delayms=3000)
 
 ## How to reproduce
 
