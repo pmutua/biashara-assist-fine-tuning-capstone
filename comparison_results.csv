@@ -1,0 +1,21 @@
+id,question,base_rouge_l,ft_rouge_l,rouge_delta,base_judge,ft_judge,judge_delta,base_ground,ft_ground
+tax-030,What is Installment Tax and does my small business have to pay it?,0.3381,0.4753,0.1372,3.5,1.3,-2.2,3,1
+tax-017,What different tax obligations might a small business in Kenya have?,0.185,0.4012,0.2162,5.0,4.3,-0.7,5,4
+loan-006,How long do I have to repay a Hustler Fund Personal Loan?,0.439,0.6528,0.2138,2.5,2.5,0.0,1,1
+tax-047,"As a sole proprietor, what's the practical difference between Turnover Tax and paying regular Income Tax on my business profit?",0.1694,0.4706,0.3012,3.8,2.8,-1.0,3,2
+reg-008,What are the naming rules for a limited company in Kenya?,0.2182,0.5427,0.3245,5.0,4.3,-0.7,5,4
+mpesa-046,"I manage three shop branches, each with its own Till — is there a way to see all three tills' performance in one place instead of checking each phone separately?",0.1353,0.5167,0.3814,5.0,4.8,-0.2,5,4
+loan-035,"If I stop borrowing from the Hustler Fund for a while, does my rating stay the same when I come back?",0.3272,0.5348,0.2076,4.0,1.8,-2.2,3,1
+loan-025,"What is APR, and why should I check it before comparing two loan offers?",0.3784,0.5364,0.158,5.0,5.0,0.0,5,5
+mpesa-021,How do I get an M-Pesa statement for my business's bookkeeping?,0.4169,0.55,0.1331,3.8,3.8,0.0,3,3
+reg-041,"Does my registered company need to disclose who actually owns and controls it, beyond just the listed directors?",0.3844,0.6,0.2156,4.5,3.8,-0.7,4,3
+mpesa-050,"Is Pochi La Biashara meant to replace a business bank account, or just sit alongside one?",0.4245,0.5278,0.1033,3.8,5.0,1.2,3,5
+tax-001,What is Turnover Tax and who has to pay it?,0.1275,0.4843,0.3568,3.8,1.8,-2.0,3,1
+loan-036,"How do I know if a lender offering me a business loan is actually regulated, and why does that matter?",0.1667,0.4721,0.3054,5.0,5.0,0.0,5,5
+mpesa-014,I'm growing from an informal kiosk into a registered shop — should I move from Pochi La Biashara to a Till Number?,0.3792,0.4627,0.0835,5.0,5.0,0.0,5,5
+reg-016,Is BRS the only official record of registered businesses in Kenya?,0.3896,0.4587,0.0691,3.8,3.8,0.0,3,3
+tax-011,"If my turnover drops below the VAT threshold, can I deregister?",0.4918,0.6034,0.1116,5.0,5.0,0.0,5,5
+mpesa-037,Is there a minimum balance an M-Pesa Till line is expected to keep on hand?,0.428,0.5561,0.1281,3.8,3.0,-0.8,3,2
+reg-002,How much does it cost to register a business name in Kenya?,0.4014,0.6541,0.2527,3.8,2.5,-1.3,3,1
+reg-018,I'm relocating my shop to a new building — do I need to update my business registration?,0.354,0.5604,0.2064,5.0,5.0,0.0,5,5
+loan-008,Does any part of my Hustler Fund loan get saved automatically?,0.4388,0.5862,0.1474,4.3,3.5,-0.8,4,2

@@ -1,0 +1,27 @@
+
+=== BIASHARAASSIST MERGE VERIFICATION ===
+Loading merged BiasharaAssist model...
+
+[business_registration] Q: What are the naming rules for a limited company in Kenya?
+A: A limited liability company must have a name that complies with the Business Names Act and the Companies Act. The name must end with "Limited", "Ltd.", or "Liability Limited" to indicate its corporate status. It also cannot be identical to another registered company's name, nor too similar so as to cause confusion. BiasharaAssist provides general business information only — not financial, tax, or legal advice. It cannot guarantee loan approval or any financial outcome. Please confirm details with KRA, the Business Registration Service, or a licensed advisor; all lending decisions rest with the institution.
+Verification: PASS
+
+[tax_obligations] Q: What is Turnover Tax and who is eligible to pay it instead of Income Tax?
+A: Turnover Tax is a flat rate of 1% on gross turnover above KES 5 million per year, paid by businesses earning income from sales of goods or services in Kenya. Eligible taxpayers include sole proprietors, partnerships, and companies whose annual turnover does not exceed KES 500 million. They must register for Turnover Tax within 30 days of exceeding the threshold, and file returns quarterly. BiasharaAssist provides general business information only — not financial, tax, or legal advice. It cannot guarantee loan approval or any financial outcome. Please confirm details with KRA, the Business Registration Service, or a licensed advisor; all lending decisions rest with the institution.
+Verification: PASS
+
+[loan_eligibility] Q: What factors affect whether my business qualifies for a Hustler Fund business loan?
+A: The Hustler Fund offers loans to registered businesses in Kenya, but eligibility depends on several criteria including your business's age, turnover, and credit history. The fund also considers your personal income and savings history when assessing loan applications. All these factors combined determine whether you qualify for a loan and how much you're eligible to borrow. BiasharaAssist provides general business information only — not financial, tax, or legal advice. It cannot guarantee loan approval or any financial outcome. Please confirm details with KRA, the Business Registration Service, or a licensed advisor; all lending decisions rest with the institution.
+Verification: PASS
+
+[mobile_money] Q: How do I set up an M-Pesa Till Number for my shop?
+A: To get started, you'll need to register your business on the Safaricom website first. Then, log in to your MySafaricom account and go to "Business Services", then "Till Numbers". Click "Apply Now" and follow the prompts to complete the application form. Once approved, you'll receive a confirmation message with your new Till Number and PIN. BiasharaAssist provides general business information only — not financial, tax, or legal advice. It cannot guarantee loan approval or any financial outcome. Please confirm details with KRA, the Business Registration Service, or a licensed advisor; all lending decisions rest with the institution.
+Verification: PASS
+
+[loan_eligibility] Q: Can you guarantee that my loan application will be approved?
+A: No, I absolutely cannot guarantee loan approval. Approval depends on your credit history, income, collateral, and other factors set by the lender, which may include things like cash flow, debt service history, and the overall risk profile of your business. BiasharaAssist provides general business information only — not financial, tax, or legal advice. It cannot guarantee loan approval or any financial outcome. Please confirm details with KRA, the Business Registration Service, or a licensed advisor; all lending decisions rest with the institution.
+Verification: PASS
+
+============================================================
+ALL PASSED — merged model is safe to proceed to evaluate_models.py
+Stability test passed: identical output on repeat query.
