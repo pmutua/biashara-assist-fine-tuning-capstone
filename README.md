@@ -11,13 +11,32 @@ Business Registration Service, a licensed financial advisor, or the
 lending institution's own decision.
 
 Stakeholder: the microfinance institution's operations/product director
-(see `memo.md`).
+(see [`memo.md`](memo.md)).
 
 **A note on compute platform:** the assignment brief names Nebius
 specifically for the training deliverable. This project trains on RunPod
 instead because Nebius does not support payment from Kenya — a real
-compute-access constraint, not a preference. See `RUNPOD_GUIDE.md`'s "Why
-RunPod instead of Nebius" section for the full reasoning.
+compute-access constraint, not a preference. See [`RUNPOD_GUIDE.md`](RUNPOD_GUIDE.md)'s
+["Why RunPod instead of Nebius"](RUNPOD_GUIDE.md#why-runpod-instead-of-nebius)
+section for the full reasoning.
+
+## Contents
+
+- [Tech stack](#tech-stack)
+- [Project status](#project-status)
+- [Project structure](#project-structure)
+- [How to reproduce](#how-to-reproduce)
+- [Safety and ethics design](#safety-and-ethics-design)
+- [Evaluation methodology](#evaluation-methodology)
+- [Training run diagnosis](#training-run-diagnosis)
+- [Evaluation results](#evaluation-results)
+- [Disclaimer](#disclaimer)
+
+**Key results at a glance:** [`loss_curve.png`](loss_curve.png) (training) ·
+[`comparison_results.csv`](comparison_results.csv) (evaluation) ·
+[`memo.md`](memo.md) (stakeholder recommendation) ·
+[`inference_demo_log.txt`](inference_demo_log.txt) (5 sample responses,
+safety gate) · [`CURATION.md`](CURATION.md) (dataset sourcing)
 
 ## Tech stack
 
@@ -25,22 +44,23 @@ RunPod instead of Nebius" section for the full reasoning.
 |---|---|---|
 | Base model | [`meta-llama/Meta-Llama-3.1-8B-Instruct`](https://huggingface.co/meta-llama/Meta-Llama-3.1-8B-Instruct) — gated, hosted on Hugging Face | The Instruct variant already follows the chat/messages format and instruction-following behaviour this dataset is built around |
 | Fine-tuning method | QLoRA — 4-bit NF4 quantization + LoRA adapters over `q_proj`/`k_proj`/`v_proj`/`o_proj` | Fits an 8B model's training footprint on a single 24GB consumer/prosumer GPU instead of a multi-GPU full fine-tune |
-| Training stack | `transformers==4.43.3`, `trl==0.8.6` (`SFTTrainer`), `peft==0.11.1`, `bitsandbytes>=0.46.1`, `accelerate==0.33.0` | Exact pinned combination confirmed to run this training job end to end on a RunPod CUDA 12.8 template — see `RUNPOD_GUIDE.md`'s troubleshooting table for what breaks if any one of these drifts |
-| Compute platform | [RunPod](https://runpod.io) GPU pod — Ampere-or-newer, 24GB+ VRAM (A40 or RTX 4090 recommended) | The brief names Nebius, but Nebius does not support payment from Kenya — see the compute-platform note above and `RUNPOD_GUIDE.md` |
+| Training stack | `transformers==4.43.3`, `trl==0.8.6` (`SFTTrainer`), `peft==0.11.1`, `bitsandbytes>=0.46.1`, `accelerate==0.33.0` | Exact pinned combination confirmed to run this training job end to end on a RunPod CUDA 12.8 template — see [`RUNPOD_GUIDE.md`](RUNPOD_GUIDE.md)'s troubleshooting table for what breaks if any one of these drifts |
+| Compute platform | [RunPod](https://runpod.io) GPU pod — Ampere-or-newer, 24GB+ VRAM (A40 or RTX 4090 recommended) | The brief names Nebius, but Nebius does not support payment from Kenya — see the compute-platform note above and [`RUNPOD_GUIDE.md`](RUNPOD_GUIDE.md) |
 | Model access / hosting | Hugging Face Hub (`huggingface_hub`) | Downloads the gated base model; hosts the merged model's config/tokenizer format |
-| Dataset format | LLaMA chat/`messages`-format JSONL, hand-curated with per-record provenance (`source_doc`/`source_url`/`verified`) | Matches the brief's required training format; provenance fields let `data_prep.py` mechanically reject unsourced content |
-| Dataset tooling | `data_prep.py` — Python standard library only (`argparse`, `json`, `random`, `statistics`) | No extra dependency needed for validation/splitting; keeps the dataset gate runnable anywhere, no GPU or network required |
+| Dataset format | LLaMA chat/`messages`-format JSONL, hand-curated with per-record provenance (`source_doc`/`source_url`/`verified`) | Matches the brief's required training format; provenance fields let [`data_prep.py`](data_prep.py) mechanically reject unsourced content |
+| Dataset tooling | [`data_prep.py`](data_prep.py) — Python standard library only (`argparse`, `json`, `random`, `statistics`) | No extra dependency needed for validation/splitting; keeps the dataset gate runnable anywhere, no GPU or network required |
 | Lexical evaluation | `rouge-score` (ROUGE-L) + a hand-rolled token-F1 function | Fast, free, local metrics that don't depend on an external API being up |
 | LLM-as-judge evaluation | [OpenRouter](https://openrouter.ai) serving `openai/gpt-4o-mini`, called via the `openai>=1.0` Python client (OpenAI-API-compatible) | One quality dimension automated metrics can't capture — correctness/groundedness/relevance/helpfulness scored by a second model |
-| Loss visualization | `matplotlib` (`plot_loss.py`) | Renders `trainer_state.json`'s `log_history` into the required train-vs-validation loss curve |
-| Data wrangling / reporting | `pandas`, `tabulate` | Builds `comparison_results.csv` and the printed comparison table in `evaluate_models.py` |
-| Config / secrets | `python-dotenv` + a gitignored `.env` (see `.env.example`) | Keeps `HF_TOKEN`/`JUDGE_API_KEY` out of source control while still loadable by local scripts |
+| Loss visualization | `matplotlib` ([`plot_loss.py`](plot_loss.py)) | Renders `trainer_state.json`'s `log_history` into the required train-vs-validation loss curve — see [`loss_curve.png`](loss_curve.png) |
+| Data wrangling / reporting | `pandas`, `tabulate` | Builds [`comparison_results.csv`](comparison_results.csv) and the printed comparison table in [`evaluate_models.py`](evaluate_models.py) |
+| Config / secrets | `python-dotenv` + a gitignored `.env` (see [`.env.example`](.env.example)) | Keeps `HF_TOKEN`/`JUDGE_API_KEY` out of source control while still loadable by local scripts |
 | Language / runtime | Python 3.10+ | Matches the `from __future__ import annotations` + modern type-hint syntax (`list[dict]`, `tuple[...]`) used throughout every script |
-| Version control / hosting | Git + GitHub | Repository hosting for submission; `git clone` is also the fastest way to get this repo onto a RunPod pod (see `RUNPOD_GUIDE.md` Step 3) |
-| Testing | `pytest` (`tests/`) | Unit-tests the pure logic in every script — dataset splitting, loss-curve diagnosis, the safety gate, the scoring functions — without needing a GPU, `HF_TOKEN`, or a real merged model; see `WORKFLOW.md`'s "Testing" section |
+| Version control / hosting | Git + GitHub | Repository hosting for submission; `git clone` is also the fastest way to get this repo onto a RunPod pod (see [`RUNPOD_GUIDE.md`](RUNPOD_GUIDE.md) Step 3) |
+| Testing | `pytest` ([`tests/`](tests/)) | Unit-tests the pure logic in every script — dataset splitting, loss-curve diagnosis, the safety gate, the scoring functions — without needing a GPU, `HF_TOKEN`, or a real merged model; see [`WORKFLOW.md`](WORKFLOW.md)'s "Testing" section |
 
-`requirements.txt` is the single source of truth for exact package pins —
-this table explains *why* each one is here, not just *that* it's here.
+[`requirements.txt`](requirements.txt) is the single source of truth for
+exact package pins — this table explains *why* each one is here, not just
+*that* it's here.
 
 ## Project status
 
@@ -50,37 +70,50 @@ next starts (see the brief this repo was built from).
 | Milestone | What it produces | Status |
 |---|---|---|
 | M0 — Scaffold | Repo layout, scripts below, 12 unverified template dataset records | Done |
-| M1 — Dataset | `train/val/test.jsonl`, `validation_report.md`, zero validation errors | Done — 199 sourced records (49/50/50/50 across areas), 159/20/20 split; see `CURATION.md` |
-| M2 — Training | Completed training run on RunPod: `adapter/`, `trainer_state.json`, `loss_curve.png` | **Done** — A40 pod, 3 epochs, 202s wall-clock; healthy convergence, no overfitting; see "Training run diagnosis" below |
-| M3 — Merge & inference | `merged-model/`, 5+ verified sample responses | **Done** — `merge_model.py` + `local_inference.py` run on the pod; **5/5 sample responses passed** the disclaimer/safety gate, including the guarantee-refusal case; see `inference_demo_log.txt` |
-| M4 — Evaluation | `comparison_results.csv`, comparison table, top/bottom-3 analysis | **Done** — all 20 test questions evaluated; see "Evaluation results" below and `comparison_results.csv` |
-| M5 — Memo | `memo.md` filled with real numbers | Pending — needs real RunPod compute cost from the billing console |
+| M1 — Dataset | [`train`/`val`/`test.jsonl`](data/), [`validation_report.md`](validation_report.md), zero validation errors | **Done** — 199 sourced records (49/50/50/50 across areas), 159/20/20 split; see [`CURATION.md`](CURATION.md) |
+| M2 — Training | Completed training run on RunPod: `adapter/`, [`trainer_state.json`](adapter/trainer_state.json), [`loss_curve.png`](loss_curve.png) | **Done** — A40 pod, 3 epochs, 202s wall-clock; healthy convergence, no overfitting; see [Training run diagnosis](#training-run-diagnosis) below |
+| M3 — Merge & inference | `merged-model/`, 5+ verified sample responses | **Done** — [`merge_model.py`](merge_model.py) + [`local_inference.py`](local_inference.py) run on the pod; **5/5 sample responses passed** the disclaimer/safety gate, including the guarantee-refusal case; see [`inference_demo_log.txt`](inference_demo_log.txt) |
+| M4 — Evaluation | [`comparison_results.csv`](comparison_results.csv), comparison table, top/bottom-3 analysis | **Done** — all 20 test questions evaluated; see [Evaluation results](#evaluation-results) below |
+| M5 — Memo | [`memo.md`](memo.md) filled with real numbers | **Done** — compute cost sourced from RunPod's own [billing export](runpod-billing-summary-daily-2026-08-01_2026-08-29.csv) |
 
 ## Project structure
 
-- `data/raw_curated.jsonl` — human-curated dataset with provenance (source of truth)
-- `data/train.jsonl`, `data/val.jsonl`, `data/test.jsonl` — generated by `data_prep.py`
-- `data_prep.py` — validates `raw_curated.jsonl` and writes the 80/10/10 split
-- `tests/` — `pytest` unit tests for every script's pure logic (see `WORKFLOW.md`)
-- `fine_tune.py` — QLoRA training script (runs on a RunPod GPU pod)
-- `plot_loss.py` — reads `trainer_state.json`, plots `loss_curve.png`
-- `merge_model.py` — merges the trained adapter into the base model (RunPod)
-- `local_inference.py` — inference pipeline with the safety/disclaimer gate
-- `evaluate_models.py` — base vs. fine-tuned evaluation on `test.jsonl`
-- `comparison_results.csv` — evaluation metrics (produced by `evaluate_models.py`)
-- `memo.md` — one-page stakeholder recommendation
-- `CURATION.md` — how records are sourced and verified
-- `validation_report.md` — produced by `data_prep.py`
-- `WORKFLOW.md` — day-by-day runbook: exact commands, which machine each
+**Dataset**
+- [`data/raw_curated.jsonl`](data/raw_curated.jsonl) — human-curated dataset with provenance (source of truth)
+- [`data/train.jsonl`](data/train.jsonl), [`data/val.jsonl`](data/val.jsonl), [`data/test.jsonl`](data/test.jsonl) — generated by [`data_prep.py`](data_prep.py)
+- [`data_prep.py`](data_prep.py) — validates `raw_curated.jsonl` and writes the 80/10/10 split
+- [`CURATION.md`](CURATION.md) — how records are sourced and verified
+- [`validation_report.md`](validation_report.md) — produced by `data_prep.py`
+
+**Training, merge, and inference**
+- [`fine_tune.py`](fine_tune.py) — QLoRA training script (runs on a RunPod GPU pod)
+- [`adapter/trainer_state.json`](adapter/trainer_state.json) — loss/eval_loss log from the completed training run (the rest of `adapter/` is gitignored — see [`.gitignore`](.gitignore))
+- [`plot_loss.py`](plot_loss.py) — reads `trainer_state.json`, plots [`loss_curve.png`](loss_curve.png)
+- [`merge_model.py`](merge_model.py) — merges the trained adapter into the base model (RunPod)
+- [`local_inference.py`](local_inference.py) — inference pipeline with the safety/disclaimer gate
+- [`inference_demo_log.txt`](inference_demo_log.txt) — 5 sample responses + safety-gate verification, produced by `local_inference.py`
+
+**Evaluation and results**
+- [`evaluate_models.py`](evaluate_models.py) — base vs. fine-tuned evaluation on `test.jsonl`
+- [`comparison_results.csv`](comparison_results.csv) — per-question evaluation metrics (produced by `evaluate_models.py`)
+- [`memo.md`](memo.md) — one-page stakeholder recommendation
+- [`runpod-billing-summary-daily-2026-08-01_2026-08-29.csv`](runpod-billing-summary-daily-2026-08-01_2026-08-29.csv) — RunPod's own exported billing data, cited source for `memo.md`'s compute-cost figure
+
+**Docs, tests, and process evidence**
+- [`WORKFLOW.md`](WORKFLOW.md) — day-by-day runbook: exact commands, which machine each
   step runs on, and the "done when" checklist for each milestone
-- `RUNPOD_GUIDE.md` — detailed, click-by-click RunPod walkthrough for
-  Day 2/3, written for a developer who has never used RunPod before
+- [`RUNPOD_GUIDE.md`](RUNPOD_GUIDE.md) — detailed, click-by-click RunPod walkthrough,
+  including a real [field-notes section with screenshots](RUNPOD_GUIDE.md#field-notes--the-actual-2026-08-29-run-step-by-step) from the actual run
+- [`screenshots/`](screenshots/) — screenshots referenced by `RUNPOD_GUIDE.md`'s field notes
+- [`tests/`](tests/) — `pytest` unit tests for every script's pure logic (see `WORKFLOW.md`'s "Testing" section)
 
 ## How to reproduce
 
 For the day-by-day version of these same steps — what to check before
 moving on, where each script runs, and rough time/cost expectations per
-stage — see `WORKFLOW.md`.
+stage — see [`WORKFLOW.md`](WORKFLOW.md). For the click-by-click RunPod
+walkthrough with real screenshots from the actual run, see
+[`RUNPOD_GUIDE.md`](RUNPOD_GUIDE.md).
 
 1. **Environment setup**
 
@@ -91,9 +124,9 @@ stage — see `WORKFLOW.md`.
    cp .env.example .env   # then fill in HF_TOKEN and JUDGE_API_KEY
    ```
 
-   `requirements.txt` covers both the local side (this machine) and the
-   RunPod side (training/merge); it deliberately does not pin `torch` —
-   see the comment at the top of that file for why.
+   [`requirements.txt`](requirements.txt) covers both the local side (this
+   machine) and the RunPod side (training/merge); it deliberately does not
+   pin `torch` — see the comment at the top of that file for why.
 
 2. **Run the tests** — confirms the codebase itself is healthy before you
    spend any time or RunPod money on it:
@@ -106,7 +139,8 @@ stage — see `WORKFLOW.md`.
    ROUGE-L test if `rouge-score` isn't installed yet — harmless). None of
    this needs a GPU, `HF_TOKEN`, or network access.
 
-3. **Data**: curate `data/raw_curated.jsonl` per `CURATION.md`, then:
+3. **Data**: curate [`data/raw_curated.jsonl`](data/raw_curated.jsonl) per
+   [`CURATION.md`](CURATION.md), then:
 
    ```bash
    python data_prep.py
@@ -114,7 +148,7 @@ stage — see `WORKFLOW.md`.
 
    This must report zero validation errors before you move on — it writes
    `data/train.jsonl`, `data/val.jsonl`, `data/test.jsonl`, and
-   `validation_report.md`.
+   [`validation_report.md`](validation_report.md).
 
 4. **Fine-tuning**: copy the repo to a RunPod GPU pod (24GB minimum — RTX
    4090 / A5000 / A100), then, inside `tmux` so the run survives a dropped
@@ -168,10 +202,10 @@ The brief requires the domain's disclaimer to be built into both the
 system prompt and the validation gate, not just mentioned in a memo.
 Concretely, that's four separate layers, each in a different file:
 
-1. **Dataset gate** (`data_prep.py`) — a record cannot reach the training
-   split unless `verified: true` and both `source_doc`/`source_url` are
-   filled in; unsourced or unverified records are rejected before
-   training ever sees them (see `CURATION.md`).
+1. **Dataset gate** ([`data_prep.py`](data_prep.py)) — a record cannot reach
+   the training split unless `verified: true` and both `source_doc`/`source_url`
+   are filled in; unsourced or unverified records are rejected before
+   training ever sees them (see [`CURATION.md`](CURATION.md)).
 2. **Training-time system prompt** (`data_prep.py`'s `SYSTEM_PROMPT` and
    `DISCLAIMER` constants) — every training example's assistant turn ends
    with the exact disclaimer, and the system prompt explicitly instructs
@@ -179,7 +213,7 @@ Concretely, that's four separate layers, each in a different file:
    outcome, or issue a binding tax/legal ruling. Two dataset records
    (`loan-003`, `loan-004`) exist specifically to teach the
    guarantee-seeking refusal case.
-3. **Inference-time verification gate** (`local_inference.py`'s
+3. **Inference-time verification gate** ([`local_inference.py`](local_inference.py)'s
    `passes_safety_gate`) — every response is checked for the disclaimer's
    presence and scanned against a list of outcome-promising phrases
    (`"your loan is approved"`, `"100% approval"`, etc.). That phrase list
@@ -189,11 +223,15 @@ Concretely, that's four separate layers, each in a different file:
    naive keyword filter reusing them would flag every compliant response
    as unsafe. The gate checks for affirmative phrasing that would
    *contradict* the disclaimer, not for the disclaimer's own vocabulary.
-4. **Evaluation-time compliance floor** (`evaluate_models.py`'s
+   See [`inference_demo_log.txt`](inference_demo_log.txt) for the real
+   verification run — 5/5 passed.
+4. **Evaluation-time compliance floor** ([`evaluate_models.py`](evaluate_models.py)'s
    `GROUNDEDNESS_FLOOR = 3.0`) — any fine-tuned response the LLM judge
    scores below 3/5 on groundedness is printed as a `[ALERT]` during the
    run and counted toward a compliance warning in the final summary,
-   independent of how well it scores on the other three dimensions.
+   independent of how well it scores on the other three dimensions. See
+   [Evaluation results](#evaluation-results) below — this floor caught a
+   real regression in this run.
 
 ## Evaluation methodology
 
@@ -217,8 +255,9 @@ smallest improvements.
 
 ## Training run diagnosis
 
-`fine_tune.py` ran on a RunPod A40 pod: 3 epochs over 159 training / 20
-validation examples, `train_runtime` 202.24s. `trainer_state.json`'s full
+[`fine_tune.py`](fine_tune.py) ran on a RunPod A40 pod: 3 epochs over 159
+training / 20 validation examples, `train_runtime` 202.24s.
+[`adapter/trainer_state.json`](adapter/trainer_state.json)'s full
 `log_history`:
 
 | Epoch | train `loss` | `eval_loss` |
@@ -234,12 +273,13 @@ indicating the adapter learned the general pattern rather than
 memorising training examples at validation's expense. `grad_norm`
 shrinking over the run (2.15 → 0.34 → 0.30) and the cosine-scheduled
 `learning_rate` decaying to `0.0` by the final step both confirm smooth
-convergence rather than instability. See `loss_curve.png`.
+convergence rather than instability. See [`loss_curve.png`](loss_curve.png).
 
 ## Evaluation results
 
-All 20 `data/test.jsonl` questions evaluated, base LLaMA vs.
-`merged-model/`, full numbers in `comparison_results.csv`:
+All 20 [`data/test.jsonl`](data/test.jsonl) questions evaluated, base
+LLaMA vs. `merged-model/`, full numbers in
+[`comparison_results.csv`](comparison_results.csv):
 
 | Metric | Base LLaMA | Fine-Tuned | Delta |
 |---|---|---|---|
