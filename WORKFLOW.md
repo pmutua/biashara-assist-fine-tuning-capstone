@@ -37,6 +37,9 @@ choice go unexplained.
       your platform before Day 3/4 — both `local_inference.py` and
       `evaluate_models.py` need it and will fail with
       `ModuleNotFoundError: No module named 'torch'` without it).
+- [ ] `pytest` passes (`45 passed, 1 skipped`) — confirms the environment
+      is set up correctly before you rely on any of these scripts. See
+      "Testing" below.
 - [ ] Hugging Face account created, and access requested at
       `huggingface.co/meta-llama/Meta-Llama-3.1-8B-Instruct` (Meta gates
       this model; approval can take anywhere from minutes to a day or two

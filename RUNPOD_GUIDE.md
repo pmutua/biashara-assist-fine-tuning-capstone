@@ -89,6 +89,8 @@ evaluation happens on the pod; only the small files (`trainer_state.json`,
 - [ ] This repo's `data/train.jsonl` and `data/val.jsonl` already
       generated locally (`python data_prep.py` must have printed
       `VALIDATION PASSED` first — see `CURATION.md`/`WORKFLOW.md` Day 1).
+- [ ] `pytest` passes locally (`45 passed, 1 skipped`) — catches a broken
+      script *before* you're paying for GPU time to find out, not after.
 - [ ] `fine_tune.py` and `merge_model.py` from this repo, ready to upload.
 
 ## The steps at a glance

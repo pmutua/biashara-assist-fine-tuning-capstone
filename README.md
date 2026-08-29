@@ -95,7 +95,18 @@ stage — see `WORKFLOW.md`.
    RunPod side (training/merge); it deliberately does not pin `torch` —
    see the comment at the top of that file for why.
 
-2. **Data**: curate `data/raw_curated.jsonl` per `CURATION.md`, then:
+2. **Run the tests** — confirms the codebase itself is healthy before you
+   spend any time or RunPod money on it:
+
+   ```bash
+   pytest
+   ```
+
+   Should print `45 passed, 1 skipped` (the skip is `evaluate_response()`'s
+   ROUGE-L test if `rouge-score` isn't installed yet — harmless). None of
+   this needs a GPU, `HF_TOKEN`, or network access.
+
+3. **Data**: curate `data/raw_curated.jsonl` per `CURATION.md`, then:
 
    ```bash
    python data_prep.py
@@ -105,7 +116,7 @@ stage — see `WORKFLOW.md`.
    `data/train.jsonl`, `data/val.jsonl`, `data/test.jsonl`, and
    `validation_report.md`.
 
-3. **Fine-tuning**: copy the repo to a RunPod GPU pod (24GB minimum — RTX
+4. **Fine-tuning**: copy the repo to a RunPod GPU pod (24GB minimum — RTX
    4090 / A5000 / A100), then, inside `tmux` so the run survives a dropped
    connection:
 
@@ -119,14 +130,14 @@ stage — see `WORKFLOW.md`.
    **Stop the pod from the RunPod console the moment training finishes** —
    you are billed for pod uptime, not just training time.
 
-4. **Loss curve**: on the pod or after copying `adapter/trainer_state.json`
+5. **Loss curve**: on the pod or after copying `adapter/trainer_state.json`
    back locally:
 
    ```bash
    python plot_loss.py
    ```
 
-5. **Merging** (on the pod, before you terminate it — needs the full-size
+6. **Merging** (on the pod, before you terminate it — needs the full-size
    base model weights in memory):
 
    ```bash
@@ -136,13 +147,13 @@ stage — see `WORKFLOW.md`.
    Then download `merged-model/` back to this machine (or continue
    locally if your machine can hold an 8B model in memory).
 
-6. **Local inference**:
+7. **Local inference**:
 
    ```bash
    python local_inference.py
    ```
 
-7. **Evaluation**:
+8. **Evaluation**:
 
    ```bash
    python evaluate_models.py
